@@ -70,3 +70,35 @@ void startAlarm() {
   lcd.setCursor(0, 1);
   lcd.print("Enter: ");
 }
+
+// ------------------------------------------------------------
+// READ POTENTIOMETER AS USER INPUT
+// ------------------------------------------------------------
+void readKnob() {
+  int knobValue = analogRead(knob);
+  enteredCode = map(knobValue, 0, 1023, 0, 999);
+
+  lcd.setCursor(7, 1);
+  lcd.print("    "); // clear old digits
+  lcd.setCursor(7, 1);
+  lcd.print(enteredCode);
+}
+
+// ------------------------------------------------------------
+// BUZZER GETS LOUDER + FASTER EVERY 10 SECONDS
+// ------------------------------------------------------------
+void updateBuzzer() {
+  unsigned long now = millis();
+
+  tone(buzzer, 1000, 100); // short beep
+  delay(beepInterval);
+
+  if (now - lastIncrease > 10000) {
+    lastIncrease = now;
+
+    beepInterval = max(100, beepInterval - 100); // faster
+    beepPower = min(255, beepPower + 30);        // louder
+
+    analogWrite(buzzer, beepPower);
+  }
+}
