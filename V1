@@ -17,3 +17,34 @@ unsigned long lastIncrease = 0;
 int beepInterval = 800;       // Time between beeps
 int beepPower = 50;           // Buzzer intensity
 bool alarmOn = false;
+
+void setup() {
+  lcd.begin(16, 2);
+
+  // Set backlight color (R, G, B)
+  lcd.setRGB(100, 0, 0);   // Soft blue
+
+  randomSeed(analogRead(A2)); // Random seed from floating pin
+
+  pinMode(buzzer, OUTPUT);
+
+  lcd.print("System Ready");
+  delay(1500);
+  lcd.clear();
+}
+
+void loop() {
+  int lightValue = analogRead(lightSensor);
+
+  // --- TRIGGER ALARM WHEN LIGHT IS LOW ---
+  if (lightValue < 500 && !alarmOn) {
+    startAlarm();
+  }
+
+  // --- RUN ALARM ---
+  if (alarmOn) {
+    readKnob();
+    updateBuzzer();
+    checkCode();
+  }
+}
