@@ -1,3 +1,4 @@
+//Commit 1
 #include <Wire.h>
 #include "rgb_lcd.h"
 
@@ -47,4 +48,25 @@ void loop() {
     updateBuzzer();
     checkCode();
   }
+}
+
+//Commit 2
+// ------------------------------------------------------------
+// START ALARM
+// ------------------------------------------------------------
+void startAlarm() {
+  alarmOn = true;
+
+  correctCode = random(100, 999); // 3‑digit random code
+
+  lcd.clear();
+  lcd.setRGB(255, 0, 0); // Red backlight for alarm
+  lcd.print("ALARM TRIGGERED");
+  delay(1500);
+
+  lcd.clear();
+  lcd.print("Code: ");
+  lcd.print(correctCode);
+  lcd.setCursor(0, 1);
+  lcd.print("Enter: ");
 }
