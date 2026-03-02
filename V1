@@ -1,0 +1,19 @@
+#include <Wire.h>
+#include "rgb_lcd.h"
+
+// --- GROVE RGB LCD ---
+rgb_lcd lcd;
+
+// --- PIN SETUP ---
+const int lightSensor = A1;   // LDR/light sensor
+const int knob = A0;          // Potentiometer for entering code
+const int buzzer = 2;         // Buzzer output pin
+
+// --- ALARM VARIABLES ---
+int correctCode = 0;          // Random 3‑digit code
+int enteredCode = 0;          // User input from potentiometer
+
+unsigned long lastIncrease = 0;
+int beepInterval = 800;       // Time between beeps
+int beepPower = 50;           // Buzzer intensity
+bool alarmOn = false;
