@@ -102,3 +102,20 @@ void updateBuzzer() {
     analogWrite(buzzer, beepPower);
   }
 }
+// ------------------------------------------------------------
+// CHECK IF USER ENTERED CORRECT CODE
+// ------------------------------------------------------------
+void checkCode() {
+  if (enteredCode == correctCode) {
+    alarmOn = false;
+    noTone(buzzer);
+
+    lcd.clear();
+    lcd.setRGB(0, 255, 0); // Green backlight for success
+    lcd.print("ALARM DISABLED");
+    delay(2000);
+
+    lcd.setRGB(0, 120, 255); // Back to normal
+    lcd.clear();
+  }
+}
