@@ -25,22 +25,12 @@ const char* password = "eddyshaw";
 int  correctCode  = 0;
 int  enteredCode  = 0;
 bool alarmOn      = false;
-bool armed        = false;   // must be armed before light sensor can trigger
+bool armed        = false;
 
 // --- NON-BLOCKING BUZZER ---
 unsigned long lastBeep     = 0;
 unsigned long lastIncrease = 0;
 int beepInterval = 800;
-
-// =============================================================
-// API CONTRACT
-//   GET /arm      -> arms the light-sensor trigger
-//   GET /disarm   -> disarms the light-sensor trigger
-//   GET /trigger  -> starts the alarm immediately
-//   GET /disable  -> stops the alarm
-//   GET /status   -> JSON: { "light", "entered", "alarmOn", "armed" }
-//                    NOTE: correctCode intentionally NOT exposed
-// =============================================================
 
 void setup() {
   Serial.begin(9600);
@@ -76,28 +66,24 @@ void setup() {
 void loop() {
   int lightValue = analogRead(lightSensor);
 
-  // Only trigger from light sensor when armed
   if (armed && lightValue < 500 && !alarmOn) {
     startAlarm();
   }
 
   if (alarmOn) {
     readKnob();
-    updateBuzzer();   // non-blocking -- no delay() here
+    updateBuzzer();
     checkCode();
   }
 
   handleWebClient();
 }
 
-// ------------------------------------------------------------
-// START ALARM
-// ------------------------------------------------------------
 void startAlarm() {
-  if (alarmOn) return;                 // guard: don't restart mid-alarm
+  if (alarmOn) return;
   alarmOn      = true;
   correctCode  = random(100, 999);
-  beepInterval = 800;                  // reset escalation each trigger
+  beepInterval = 800;
   lastIncrease = millis();
   lastBeep     = millis();
 
@@ -112,11 +98,8 @@ void startAlarm() {
   lcd.print("Enter: ");
 }
 
-// ------------------------------------------------------------
-// DISABLE ALARM  (guarded -- safe to call from anywhere)
-// ------------------------------------------------------------
 void disableAlarm() {
-  if (!alarmOn) return;                // guard: only run if alarm is active
+  if (!alarmOn) return;
   alarmOn = false;
   noTone(buzzer);
 
@@ -130,9 +113,6 @@ void disableAlarm() {
   lcd.print("System Ready");
 }
 
-// ------------------------------------------------------------
-// READ POTENTIOMETER
-// ------------------------------------------------------------
 void readKnob() {
   int knobValue = analogRead(knob);
   enteredCode = map(knobValue, 0, 1023, 0, 999);
@@ -143,38 +123,26 @@ void readKnob() {
   lcd.print(enteredCode);
 }
 
-// ------------------------------------------------------------
-// NON-BLOCKING BUZZER  (no delay -- uses millis)
-// ------------------------------------------------------------
 void updateBuzzer() {
   unsigned long now = millis();
 
-  // Beep on schedule
   if (now - lastBeep >= (unsigned long)beepInterval) {
     tone(buzzer, 1000, 100);
     lastBeep = now;
   }
 
-  // Escalate every 10 seconds
   if (now - lastIncrease >= 10000) {
     lastIncrease = now;
     beepInterval = max(100, beepInterval - 100);
-    // analogWrite(buzzer) removed -- conflicts with tone()
   }
 }
 
-// ------------------------------------------------------------
-// CHECK CODE
-// ------------------------------------------------------------
 void checkCode() {
   if (enteredCode == correctCode) {
     disableAlarm();
   }
 }
 
-// ------------------------------------------------------------
-// WEB SERVER  -- implements the API contract above
-// ------------------------------------------------------------
 void handleWebClient() {
   WiFiClient client = server.available();
   if (!client) return;
@@ -182,7 +150,6 @@ void handleWebClient() {
   String request = client.readStringUntil('\r');
   client.flush();
 
-  // Route: /arm
   if (request.indexOf("/arm") != -1) {
     armed = true;
     lcd.clear();
@@ -191,7 +158,6 @@ void handleWebClient() {
     return;
   }
 
-  // Route: /disarm
   if (request.indexOf("/disarm") != -1) {
     armed = false;
     lcd.clear();
@@ -200,21 +166,18 @@ void handleWebClient() {
     return;
   }
 
-  // Route: /trigger
   if (request.indexOf("/trigger") != -1) {
     startAlarm();
     sendResponse(client, "OK");
     return;
   }
 
-  // Route: /disable
   if (request.indexOf("/disable") != -1) {
     disableAlarm();
     sendResponse(client, "OK");
     return;
   }
 
-  // Route: /status  (JSON -- correctCode intentionally excluded)
   if (request.indexOf("/status") != -1) {
     String json = "{";
     json += "\"light\":"   + String(analogRead(lightSensor)) + ",";
@@ -232,15 +195,11 @@ void handleWebClient() {
     return;
   }
 
-  // Default: 404
   client.println("HTTP/1.1 404 Not Found");
   client.println();
   client.stop();
 }
 
-// ------------------------------------------------------------
-// HELPER: plain-text 200 response
-// ------------------------------------------------------------
 void sendResponse(WiFiClient client, String body) {
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/plain");
