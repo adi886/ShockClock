@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ShockClock</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #111; display: flex; justify-content: center; padding: 30px 16px; min-height: 100vh; }
+  .card { background: #1a1a1a; border: 1px solid #2a2a2a; padding: 28px 24px; width: 100%; max-width: 420px; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); color: #e2e8f0; height: fit-content; }
+  h1 { font-size: 26px; text-align: center; letter-spacing: 3px; text-transform: uppercase; color: #fff; margin-bottom: 4px; }
+  .subtitle { text-align: center; font-size: 12px; color: #475569; letter-spacing: 1px; margin-bottom: 24px; }
+  #clock { font-size: 42px; text-align: center; font-weight: 700; color: #fff; letter-spacing: 2px; margin-bottom: 16px; }
+  .status-badge { text-align: center; font-size: 15px; font-weight: 700; padding: 10px; border-radius: 8px; margin-bottom: 16px; }
+  .status-safe   { background:#052e16; color:#4ade80; border:1px solid #166534; }
+  .status-active { background:#450a0a; color:#f87171; border:1px solid #991b1b; animation: pulse 1s ease-in-out infinite; }
+  .status-error  { background:#1c1917; color:#94a3b8; border:1px solid #292524; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+  .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #475569; margin: 20px 0 8px; }
+  .alarm-display { background:#0f172a; border:1px solid #1e293b; border-radius:8px; padding:10px 14px; font-size:15px; color:#94a3b8; text-align:center; margin-bottom:16px; }
+  .alarm-display.is-set { color:#fb923c; border-color:#7c2d12; }
+  .time-row { display:flex; align-items:center; justify-content:center; gap:6px; margin-bottom:12px; }
+  .time-input { width:62px; padding:8px 4px; font-size:20px; font-weight:700; text-align:center; background:#0f172a; border:1px solid #334155; border-radius:8px; color:#fff; outline:none; }
+  .time-input:focus { border-color:#6366f1; }
+  .time-sep { font-size:22px; font-weight:700; color:#475569; }
+  .btn-row { display:flex; gap:8px; margin-bottom:8px; }
+  button { flex:1; padding:10px 8px; font-size:13px; font-weight:600; border:none; border-radius:8px; cursor:pointer; transition:opacity 0.15s; }
+  button:hover { opacity:0.85; } button:active { opacity:0.7; }
+  .btn-primary { background:#6366f1; color:#fff; }
+  .btn-ghost   { background:#1e293b; color:#94a3b8; border:1px solid #334155; }
+  .btn-test    { background:#0f4c75; color:#7dd3fc; border:1px solid #0369a1; }
+  .btn-arm     { background:#14532d; color:#4ade80; border:1px solid #166534; }
+  .btn-disarm  { background:#1c1917; color:#94a3b8; border:1px solid #292524; }
+  .btn-danger  { background:#7f1d1d; color:#fca5a5; border:1px solid #991b1b; width:100%; padding:12px; font-size:15px; margin-top:4px; }
+  .arm-status { text-align:center; font-size:12px; color:#475569; margin-bottom:16px; }
+  .arm-status.armed { color:#4ade80; }
+  .info-grid { display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+  .info-row { display:flex; justify-content:space-between; align-items:center; background:#0f172a; border:1px solid #1e293b; border-radius:7px; padding:8px 12px; font-size:13px; }
+  .info-label { color:#64748b; } .info-value { color:#e2e8f0; font-weight:600; }
+  .conn-row { display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#475569; margin-top:16px; }
+  .dot { width:7px; height:7px; border-radius:50%; background:#334155; }
+  .dot.connected { background:#4ade80; box-shadow:0 0 6px #4ade80; }
+  .dot.disconnected { background:#f87171; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>ShockClock</h1>
+  <div class="subtitle">Alarm Control Panel</div>
+  <div id="clock">00:00:00</div>
+  <div class="status-badge status-error" id="alarmStatus">Connecting...</div>
+  <div class="alarm-display" id="alarmDisplay">No alarm set</div>
+
+  <div class="section-label">Set Alarm Time</div>
+  <div class="time-row">
+    <input type="number" id="hours"   class="time-input" min="0" max="23" value="7">
+    <span class="time-sep">:</span>
+    <input type="number" id="minutes" class="time-input" min="0" max="59" value="00">
+    <span class="time-sep">:</span>
+    <input type="number" id="seconds" class="time-input" min="0" max="59" value="00">
+  </div>
+  <div class="btn-row">
+    <button class="btn-primary" onclick="setAlarmTime()">Set Alarm</button>
+    <button class="btn-ghost"   onclick="clearAlarm()">Clear</button>
+    <button class="btn-test"    onclick="testAlarm()">Test Now</button>
+  </div>
+
+  <div class="section-label">Light Sensor</div>
+  <div class="btn-row">
+    <button class="btn-arm"    onclick="armSystem()">Arm Sensor</button>
+    <button class="btn-disarm" onclick="disarmSystem()">Disarm Sensor</button>
+  </div>
+  <div class="arm-status" id="armStatus">Sensor: disarmed</div>
+
+  <div class="section-label">Live Data</div>
+  <div class="info-grid">
+    <div class="info-row">
+      <span class="info-label">Light Level</span>
+      <span class="info-value" id="lightValue">--</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Entered Code</span>
+      <span class="info-value" id="enteredCode">--</span>
+    </div>
+    <!-- Correct code intentionally omitted - shown on LCD only -->
+  </div>
+
+  <button class="btn-danger" onclick="disableAlarm()">Disable Alarm</button>
+
+  <div class="conn-row">
+    <div class="dot" id="connDot"></div>
+    <span id="connLabel">Not connected</span>
+  </div>
+</div>
+
+<script>
+  // Change this to your Arduino's IP address, e.g. "http://192.168.1.42"
+  const ARDUINO_IP = "http://10.57.75.186";
+
+  let alarmTime = null;
+  let alarmTriggered = false;
+
+  function updateClock() {
+    const now = new Date();
+    const pad = n => String(n).padStart(2, "0");
+    document.getElementById("clock").textContent =
+      pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds());
+    checkAlarmTime(now);
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  function checkAlarmTime(now) {
+    if (!alarmTime || alarmTriggered) return;
+    if (now.getHours()   === alarmTime.hours &&
+        now.getMinutes() === alarmTime.minutes &&
+        now.getSeconds() === alarmTime.seconds) {
+      triggerAlarm();
+      alarmTriggered = true;
+    }
+  }
+
+  function setAlarmTime() {
+    const h = parseInt(document.getElementById("hours").value);
+    const m = parseInt(document.getElementById("minutes").value);
+    const s = parseInt(document.getElementById("seconds").value);
+    if (isNaN(h)||isNaN(m)||isNaN(s)||h<0||h>23||m<0||m>59||s<0||s>59) {
+      alert("Please enter a valid time."); return;
+    }
+    alarmTime = { hours:h, minutes:m, seconds:s };
+    alarmTriggered = false;
+    const pad = n => String(n).padStart(2,"0");
+    const d = document.getElementById("alarmDisplay");
+    d.textContent = "Alarm set for " + pad(h)+":"+pad(m)+":"+pad(s);
+    d.className = "alarm-display is-set";
+  }
+
+  function clearAlarm() {
+    alarmTime = null; alarmTriggered = false;
+    const d = document.getElementById("alarmDisplay");
+    d.textContent = "No alarm set"; d.className = "alarm-display";
+  }
+
+  function testAlarm()    { triggerAlarm(); }
+
+  function triggerAlarm() {
+    fetch(ARDUINO_IP + "/trigger").then(()=>updateStatus()).catch(()=>setConnectionError());
+  }
+  function disableAlarm() {
+    fetch(ARDUINO_IP + "/disable").then(()=>updateStatus()).catch(()=>setConnectionError());
+  }
+  function armSystem() {
+    fetch(ARDUINO_IP + "/arm").then(()=>updateStatus()).catch(()=>setConnectionError());
+  }
+  function disarmSystem() {
+    fetch(ARDUINO_IP + "/disarm").then(()=>updateStatus()).catch(()=>setConnectionError());
+  }
+
+  // Polls /status every second - correctCode intentionally not in response
+  function updateStatus() {
+    fetch(ARDUINO_IP + "/status")
+      .then(res => res.json())
+      .then(data => {
+        setConnected(true);
+        document.getElementById("lightValue").textContent  = data.light;
+        document.getElementById("enteredCode").textContent = data.entered;
+
+        const badge = document.getElementById("alarmStatus");
+        if (data.alarmOn) {
+          badge.textContent = "ALARM ACTIVE";
+          badge.className   = "status-badge status-active";
+        } else {
+          badge.textContent = "System Safe";
+          badge.className   = "status-badge status-safe";
+          if (alarmTriggered) alarmTriggered = false;
+        }
+
+        const arm = document.getElementById("armStatus");
+        if (data.armed) {
+          arm.textContent = "Sensor armed - triggers on darkness";
+          arm.className   = "arm-status armed";
+        } else {
+          arm.textContent = "Sensor: disarmed";
+          arm.className   = "arm-status";
+        }
+      })
+      .catch(() => setConnectionError());
+  }
+
+  function setConnectionError() {
+    setConnected(false);
+    const badge = document.getElementById("alarmStatus");
+    badge.textContent = "Cannot reach Arduino";
+    badge.className   = "status-badge status-error";
+  }
+
+  function setConnected(ok) {
+    document.getElementById("connDot").className     = "dot "+(ok?"connected":"disconnected");
+    document.getElementById("connLabel").textContent = ok ? "Connected to Arduino" : "No connection";
+  }
+
+  setInterval(updateStatus, 1000);
+  updateStatus();
+</script>
+</body>
+</html>
