@@ -10,9 +10,13 @@ How V1 works. (Without data, website and set up alarm features.)
 - Setup wifi connectivity 
 
 
-how V2 Works and how it changes:
+How V2 Works and how it changes:
 - Once you turn on the arduino, launch the website and connect the arduino tho the internet and ip address. 
 - On the website you can set the alarm clock for when it goes off and test the timer.
 - The arduino is connected to the live time.
 - Once the alarm goes off, you can see the brightness level, the password generated and the password inputed.
 - You can also turn off the alarm from here just incase there's an error or something breaks.
+
+
+How V3 Works and what it includes:
+-
