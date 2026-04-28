@@ -20,3 +20,8 @@ How V2 Works and how it changes:
 
 How V3 Works and what it includes:
 -
+ActionURL Arm the alarmhttp://192.168.1.45/arm
+Disarm the alarmhttp://192.168.1.45/disarm
+Manually trigger alarmhttp://192.168.1.45/triggerForce 
+disable alarmhttp://192.168.1.45/disableCheck 
+current statushttp://192.168.1.45/status
