@@ -25,3 +25,15 @@ Disarm the alarmhttp://192.168.1.45/disarm
 Manually trigger alarmhttp://192.168.1.45/triggerForce 
 disable alarmhttp://192.168.1.45/disableCheck 
 current statushttp://192.168.1.45/status
+
+How to use the Python file:
+
+Install dependencies first:
+pip install requests openpyxl
+Run it:
+python alarm_logger.py --ip 192.168.1.45
+
+Optional flags:
+--ip        Arduino IP address (default: 192.168.1.45)
+--interval  How often to poll in seconds (default: 1.5)
+--output    Excel filename (default: alarm_log.xlsx)
