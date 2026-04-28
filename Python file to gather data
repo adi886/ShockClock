@@ -1,0 +1,225 @@
+"""
+alarm_logger.py
+---------------
+Polls the Arduino alarm system and logs disarm events to an Excel file.
+
+Install dependencies:
+    pip install requests openpyxl
+
+Usage:
+    python alarm_logger.py
+    python alarm_logger.py --ip 192.168.1.45
+    python alarm_logger.py --ip 192.168.1.45 --interval 2 --output my_log.xlsx
+"""
+
+import requests
+import openpyxl
+import argparse
+import time
+import os
+from datetime import datetime
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+
+# ── Config ──────────────────────────────────────────────────────────────────
+DEFAULT_IP       = "192.168.1.45"   # Change to your Arduino's IP
+DEFAULT_INTERVAL = 1.5              # Poll every N seconds
+DEFAULT_OUTPUT   = "alarm_log.xlsx"
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def parse_args():
+    p = argparse.ArgumentParser(description="Arduino Alarm Logger")
+    p.add_argument("--ip",       default=DEFAULT_IP,       help="Arduino IP address")
+    p.add_argument("--interval", default=DEFAULT_INTERVAL, type=float, help="Poll interval in seconds")
+    p.add_argument("--output",   default=DEFAULT_OUTPUT,   help="Output Excel filename")
+    return p.parse_args()
+
+
+# ── Excel helpers ─────────────────────────────────────────────────────────────
+
+HEADERS = [
+    "Event #",
+    "Date",
+    "Time",
+    "Alarm Triggered At",
+    "Disarmed At",
+    "Duration (s)",
+    "Correct Code",
+    "Light Level at Trigger",
+]
+
+COL_WIDTHS = [10, 14, 10, 22, 22, 14, 14, 22]
+
+HEADER_FILL   = PatternFill("solid", start_color="0F172A")
+HEADER_FONT   = Font(bold=True, color="00FF88", name="Consolas", size=10)
+ROW_FONT      = Font(name="Consolas", size=10)
+ALT_FILL      = PatternFill("solid", start_color="1E293B")
+BORDER_SIDE   = Side(style="thin", color="334155")
+CELL_BORDER   = Border(
+    left=BORDER_SIDE, right=BORDER_SIDE,
+    top=BORDER_SIDE, bottom=BORDER_SIDE
+)
+CENTER = Alignment(horizontal="center", vertical="center")
+
+
+def init_workbook(path):
+    """Create a new workbook with styled headers and a summary sheet."""
+    wb = openpyxl.Workbook()
+
+    # ── Log sheet ──
+    ws = wb.active
+    ws.title = "Disarm Log"
+    ws.sheet_view.showGridLines = False
+    ws.freeze_panes = "A2"
+
+    for col, (header, width) in enumerate(zip(HEADERS, COL_WIDTHS), start=1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font      = HEADER_FONT
+        cell.fill      = HEADER_FILL
+        cell.alignment = CENTER
+        cell.border    = CELL_BORDER
+        ws.column_dimensions[get_column_letter(col)].width = width
+
+    ws.row_dimensions[1].height = 24
+
+    # ── Summary sheet ──
+    ws2 = wb.create_sheet("Summary")
+    ws2.sheet_view.showGridLines = False
+
+    summary_headers = [
+        ("Total Events",      '=COUNTA(\'Disarm Log\'!A2:A10000)'),
+        ("Avg Duration (s)",  '=IFERROR(AVERAGE(\'Disarm Log\'!F2:F10000),"-")'),
+        ("Min Duration (s)",  '=IFERROR(MIN(\'Disarm Log\'!F2:F10000),"-")'),
+        ("Max Duration (s)",  '=IFERROR(MAX(\'Disarm Log\'!F2:F10000),"-")'),
+        ("Avg Light Level",   '=IFERROR(AVERAGE(\'Disarm Log\'!H2:H10000),"-")'),
+    ]
+
+    ws2.column_dimensions["A"].width = 22
+    ws2.column_dimensions["B"].width = 18
+
+    title_cell = ws2["A1"]
+    title_cell.value     = "ALARM SYSTEM SUMMARY"
+    title_cell.font      = Font(bold=True, color="00FF88", name="Consolas", size=12)
+    title_cell.fill      = HEADER_FILL
+    title_cell.alignment = CENTER
+    ws2.merge_cells("A1:B1")
+
+    for i, (label, formula) in enumerate(summary_headers, start=2):
+        lc = ws2.cell(row=i, column=1, value=label)
+        vc = ws2.cell(row=i, column=2, value=formula)
+        for cell in (lc, vc):
+            cell.font      = ROW_FONT
+            cell.border    = CELL_BORDER
+            cell.alignment = CENTER
+            if i % 2 == 0:
+                cell.fill = ALT_FILL
+
+    wb.save(path)
+    print(f"[logger] Created new workbook: {path}")
+    return wb
+
+
+def load_or_create(path):
+    if os.path.exists(path):
+        wb = openpyxl.load_workbook(path)
+        print(f"[logger] Loaded existing workbook: {path}")
+    else:
+        wb = init_workbook(path)
+    return wb
+
+
+def append_event(wb, path, event_num, triggered_at, disarmed_at, duration_s, correct_code, light_level):
+    ws = wb["Disarm Log"]
+    row = ws.max_row + 1
+    date_str     = triggered_at.strftime("%Y-%m-%d")
+    time_str     = triggered_at.strftime("%H:%M:%S")
+    triggered_str = triggered_at.strftime("%Y-%m-%d %H:%M:%S")
+    disarmed_str  = disarmed_at.strftime("%Y-%m-%d %H:%M:%S")
+
+    values = [
+        event_num, date_str, time_str,
+        triggered_str, disarmed_str,
+        round(duration_s, 2),
+        correct_code, light_level,
+    ]
+
+    fill = ALT_FILL if row % 2 == 0 else None
+
+    for col, value in enumerate(values, start=1):
+        cell = ws.cell(row=row, column=col, value=value)
+        cell.font      = ROW_FONT
+        cell.alignment = CENTER
+        cell.border    = CELL_BORDER
+        if fill:
+            cell.fill = fill
+
+    ws.row_dimensions[row].height = 18
+    wb.save(path)
+    print(f"[logger] Event #{event_num} saved — duration: {duration_s:.1f}s, code: {correct_code}")
+
+
+# ── Main polling loop ─────────────────────────────────────────────────────────
+
+def main():
+    args = parse_args()
+    base_url = f"http://{args.ip}"
+
+    wb = load_or_create(args.output)
+
+    # State tracking
+    prev_alarm    = False
+    triggered_at  = None
+    trigger_light = None
+    trigger_code  = None
+    event_num     = wb["Disarm Log"].max_row  # existing rows minus header
+
+    print(f"[logger] Polling {base_url}/status every {args.interval}s")
+    print(f"[logger] Logging to: {args.output}")
+    print("[logger] Press Ctrl+C to stop\n")
+
+    while True:
+        try:
+            resp = requests.get(f"{base_url}/status", timeout=3)
+            data = resp.json()
+
+            alarm_on    = data.get("alarmOn", False)
+            light       = data.get("light", 0)
+            correct     = data.get("correct", 0)
+
+            # Alarm just started
+            if alarm_on and not prev_alarm:
+                triggered_at  = datetime.now()
+                trigger_light = light
+                trigger_code  = correct
+                print(f"[logger] Alarm triggered at {triggered_at.strftime('%H:%M:%S')} — light: {light}, code: {correct}")
+
+            # Alarm just stopped (was on, now off) — disarm event
+            if not alarm_on and prev_alarm and triggered_at is not None:
+                disarmed_at = datetime.now()
+                duration    = (disarmed_at - triggered_at).total_seconds()
+                event_num  += 1
+                append_event(
+                    wb, args.output,
+                    event_num, triggered_at, disarmed_at,
+                    duration, trigger_code, trigger_light
+                )
+                triggered_at = None
+
+            prev_alarm = alarm_on
+
+        except requests.exceptions.ConnectionError:
+            print(f"[logger] Cannot reach {base_url} — is the Arduino on?")
+        except requests.exceptions.Timeout:
+            print("[logger] Request timed out, retrying...")
+        except Exception as e:
+            print(f"[logger] Error: {e}")
+
+        time.sleep(args.interval)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n[logger] Stopped.")
