@@ -1,0 +1,230 @@
+#include <Wire.h>
+#include "rgb_lcd.h"
+
+#ifdef ESP8266
+#include <ESP8266WiFi.h>
+WiFiServer server(80);
+#else
+#include <WiFi.h>
+WiFiServer server(80);
+#endif
+
+// --- LCD ---
+rgb_lcd lcd;
+
+// --- PIN SETUP ---
+const int lightSensor = A1;
+const int knob        = A0;
+const int buzzer      = 2;
+const int touchSensor = 3;   // Grove Touch Sensor on digital pin 3
+
+// --- WIFI ---
+const char* ssid     = "Eddys";
+const char* password = "eddyshaw";
+
+// --- ALARM VARIABLES ---
+int  correctCode  = 0;
+int  enteredCode  = 0;
+bool alarmOn      = false;
+bool armed        = false;
+
+// --- NON-BLOCKING BUZZER ---
+unsigned long lastBeep     = 0;
+unsigned long lastIncrease = 0;
+int beepInterval = 800;
+
+void setup() {
+  Serial.begin(9600);
+
+  lcd.begin(16, 2);
+  lcd.setRGB(0, 120, 255);
+  randomSeed(analogRead(A2));
+  pinMode(buzzer, OUTPUT);
+  pinMode(touchSensor, INPUT);   // Touch sensor as input
+
+  Serial.println("Connecting to WiFi...");
+  lcd.print("Connecting WiFi");
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(300);
+    Serial.print(".");
+  }
+
+  server.begin();
+
+  Serial.println();
+  Serial.print("Connected! IP address: ");
+  Serial.println(WiFi.localIP());
+
+  lcd.clear();
+  lcd.print("IP:");
+  lcd.setCursor(0, 1);
+  lcd.print(WiFi.localIP());
+  delay(2000);
+  lcd.clear();
+  lcd.print("System Ready");
+}
+
+void loop() {
+  int lightValue = analogRead(lightSensor);
+
+  if (armed && lightValue < 500 && !alarmOn) {
+    startAlarm();
+  }
+
+  if (alarmOn) {
+    readKnob();
+    updateBuzzer();
+    checkCode();
+  }
+
+  handleWebClient();
+}
+
+void startAlarm() {
+  if (alarmOn) return;
+  alarmOn      = true;
+  correctCode  = random(100, 999);
+  beepInterval = 800;
+  lastIncrease = millis();
+  lastBeep     = millis();
+
+  lcd.clear();
+  lcd.setRGB(255, 0, 0);
+  lcd.print("ALARM TRIGGERED");
+  delay(1500);
+  lcd.clear();
+  lcd.print("Code: ");
+  lcd.print(correctCode);
+  lcd.setCursor(0, 1);
+  lcd.print("Enter: ");
+}
+
+void disableAlarm() {
+  if (!alarmOn) return;
+  alarmOn = false;
+  noTone(buzzer);
+
+  lcd.clear();
+  lcd.setRGB(0, 255, 0);
+  lcd.print("ALARM DISABLED");
+  delay(2000);
+
+  lcd.setRGB(0, 120, 255);
+  lcd.clear();
+  lcd.print("System Ready");
+}
+
+void readKnob() {
+  int knobValue = analogRead(knob);
+  enteredCode = map(knobValue, 0, 1023, 0, 999);
+
+  lcd.setCursor(7, 1);
+  lcd.print("    ");
+  lcd.setCursor(7, 1);
+  lcd.print(enteredCode);
+}
+
+void updateBuzzer() {
+  unsigned long now = millis();
+
+  if (now - lastBeep >= (unsigned long)beepInterval) {
+    tone(buzzer, 1000, 100);
+    lastBeep = now;
+  }
+
+  if (now - lastIncrease >= 10000) {
+    lastIncrease = now;
+    beepInterval = max(100, beepInterval - 100);
+  }
+}
+
+void checkCode() {
+  bool touchHeld = digitalRead(touchSensor) == HIGH;  // Must be holding touch sensor
+
+  // Both conditions must be true at the same time:
+  // 1. Knob is set to the correct code
+  // 2. Other hand is holding the touch sensor
+  if (enteredCode == correctCode && touchHeld) {
+    disableAlarm();
+  }
+
+  // Optional: show a hint on LCD if code is right but touch isn't held
+  if (enteredCode == correctCode && !touchHeld) {
+    lcd.setCursor(0, 0);
+    lcd.print("Hold touch pad! ");
+  } else if (alarmOn) {
+    lcd.setCursor(0, 0);
+    lcd.print("Code: ");
+    lcd.print(correctCode);
+    lcd.print("  ");
+  }
+}
+
+void handleWebClient() {
+  WiFiClient client = server.available();
+  if (!client) return;
+
+  String request = client.readStringUntil('\r');
+  client.flush();
+
+  if (request.indexOf("/arm") != -1) {
+    armed = true;
+    lcd.clear();
+    lcd.print("Armed");
+    sendResponse(client, "OK");
+    return;
+  }
+
+  if (request.indexOf("/disarm") != -1) {
+    armed = false;
+    lcd.clear();
+    lcd.print("Disarmed");
+    sendResponse(client, "OK");
+    return;
+  }
+
+  if (request.indexOf("/trigger") != -1) {
+    startAlarm();
+    sendResponse(client, "OK");
+    return;
+  }
+
+  if (request.indexOf("/disable") != -1) {
+    disableAlarm();
+    sendResponse(client, "OK");
+    return;
+  }
+
+  if (request.indexOf("/status") != -1) {
+    bool touchHeld = digitalRead(touchSensor) == HIGH;
+    String json = "{";
+    json += "\"light\":"   + String(analogRead(lightSensor)) + ",";
+    json += "\"entered\":" + String(enteredCode) + ",";
+    json += "\"alarmOn\":" + String(alarmOn ? "true" : "false") + ",";
+    json += "\"armed\":"   + String(armed   ? "true" : "false") + ",";
+    json += "\"touch\":"   + String(touchHeld ? "true" : "false");
+    json += "}";
+
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: application/json");
+    client.println("Access-Control-Allow-Origin: *");
+    client.println();
+    client.println(json);
+    client.stop();
+    return;
+  }
+
+  client.println("HTTP/1.1 404 Not Found");
+  client.println();
+  client.stop();
+}
+
+void sendResponse(WiFiClient client, String body) { 
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: text/plain");
+  client.println("Access-Control-Allow-Origin: *");
+  client.println();
+  client.println(body);
+  client.stop();
+}
